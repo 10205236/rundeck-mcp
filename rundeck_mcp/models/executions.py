@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 from rundeck_mcp.models.base import MAX_RESULTS
 from rundeck_mcp.models.jobs import JobReference
 
-ExecutionStatus = Literal["running", "succeeded", "failed", "aborted", "timedout", "scheduled"]
+ExecutionStatus = Literal["running", "succeeded", "failed", "aborted", "timedout", "scheduled", "failed-with-retry"]
 
 
 class LogEntry(BaseModel):
@@ -94,6 +94,8 @@ class Execution(BaseModel):
 
     Represents a single run of a job, including its status, timing, and results.
     """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     id: int = Field(description="The execution ID")
     href: str | None = Field(default=None, description="API URL for this execution")

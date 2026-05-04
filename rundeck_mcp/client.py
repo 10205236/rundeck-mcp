@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 API_TOKEN = os.getenv("RUNDECK_API_TOKEN")
+DEVPORTAL_TOKEN = os.getenv("X_GATEWAY_APIKEY")
 RUNDECK_URL = os.getenv("RUNDECK_URL", "http://localhost:4440")
 API_VERSION = int(os.getenv("RUNDECK_API_VERSION", "44"))
+SSL_VERIFY = os.getenv("RUNDECK_SSL_VERIFY", "true").lower() not in ("false", "0", "no")
 
 
 class RundeckClient:
@@ -27,24 +29,28 @@ class RundeckClient:
     all Rundeck API operations.
     """
 
-    def __init__(self, api_token: str, base_url: str, api_version: int = 44):
+    def __init__(self, api_token: str, devportal_token: str, base_url: str, api_version: int = 44, ssl_verify: bool = True):
         """Initialize the Rundeck client.
 
         Args:
             api_token: Rundeck API token for authentication
+            devportal_token: DevPortal token for authentication
             base_url: Base URL of the Rundeck server (e.g., 'http://localhost:4440')
             api_version: API version to use (default: 44)
+            ssl_verify: Whether to verify SSL certificates (default: True)
         """
         self.base_url = base_url.rstrip("/")
         self.api_version = api_version
         self._client = httpx.Client(
             headers={
                 "X-Rundeck-Auth-Token": api_token,
+                "x-gateway-apikey": devportal_token,
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "User-Agent": self.user_agent,
             },
             timeout=30.0,
+            verify=ssl_verify,
         )
 
     @property
@@ -60,6 +66,8 @@ class RundeckClient:
         """Build full API URL for a given path."""
         # Handle paths that already include the API version
         if path.startswith("/api/"):
+            return f"{self.base_url}{path}"
+        if self.base_url.lstrip("https://").startswith("frlm.priv.api.devportal.adeo.cloud"):
             return f"{self.base_url}{path}"
         # Add API version prefix
         return f"{self.base_url}/api/{self.api_version}{path}"
@@ -109,9 +117,9 @@ rundeck_client_factory: ContextVar[ClientFactory] = ContextVar("rundeck_client_f
 
 
 @lru_cache(maxsize=1)
-def _get_cached_client(api_token: str, base_url: str, api_version: int) -> RundeckClient:
+def _get_cached_client(api_token: str, devportal_token: str, base_url: str, api_version: int, ssl_verify: bool) -> RundeckClient:
     """Get a cached Rundeck client instance."""
-    return RundeckClient(api_token, base_url, api_version)
+    return RundeckClient(api_token, devportal_token, base_url, api_version, ssl_verify)
 
 
 def get_client() -> RundeckClient:
@@ -130,7 +138,7 @@ def get_client() -> RundeckClient:
     """
     factory = rundeck_client_factory.get(None)
     if factory is not None:
-        return factory(API_TOKEN, RUNDECK_URL, API_VERSION)
+        return factory(API_TOKEN, DEVPORTAL_TOKEN, RUNDECK_URL, API_VERSION, SSL_VERIFY)
 
     if not API_TOKEN:
         raise ValueError(
@@ -138,4 +146,4 @@ def get_client() -> RundeckClient:
             "Generate a token in Rundeck under User Profile > User API Tokens."
         )
 
-    return _get_cached_client(API_TOKEN, RUNDECK_URL, API_VERSION)
+    return _get_cached_client(API_TOKEN, DEVPORTAL_TOKEN, RUNDECK_URL, API_VERSION, SSL_VERIFY)
